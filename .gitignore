@@ -1,0 +1,4 @@
+pipeline
+main.o
+general/general.o
+general/functions_images.o

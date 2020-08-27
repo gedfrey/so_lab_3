@@ -1,0 +1,6 @@
+general.o: general/general.c general/data.h general/general.h \
+ general/functions_images.h
+functions_images.o: general/functions_images.c general/stb/stb_image.h \
+ general/stb/stb_image_resize.h general/stb/stb_image_write.h \
+ general/data_images.h
+main.o: main.c general/general.h
