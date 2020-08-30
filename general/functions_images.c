@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-// #include "data.h"
 #include "data_images.h"
+
 
 // Entradas: numero de filas y columnas
 // Funcionamiento: Funcion que crea una matrix( reserva espacio en memoria)
@@ -153,49 +153,22 @@ void printClassification(int* arrayResults,int size){
     }
 }
 
-// Entradas: una matrix de pixeles, el ancho , el largo y el umbral de classificacion
-// Funcionamiento: por cada posición busca los pixeles negros y los cuenta, posteriormente realiza el calculo
-// del porcentaje con la cantidad total de pixeles, que se calcula por el ancho y el largo
-// Salidas: un numero que indica el porcentaje de pixeles negros
 
-int classification(unsigned char** matrix, int w, int h, int umbral_classification){
-    int i,j,count,total;
-    count = 0;
-    total = w * h;
-    for(i=0;i<h;i++){
-        for(j=0;j<w;j++){
-            if(matrix[i][j] == 0){
-                count += 1;
-            }
-        }
-    }
-
-  
-    if( ((count * 100)/ total) >= umbral_classification){
-        return 1;
-    }
-
-    return 0;
-    
-
-}
 
 // Entradas: una matrix de pixeles, el ancho, largo de la imagen, el umbral de binarizacion
 // Funcionamiento: va revisando por cada pixel si este es mayor al umbral se deja como 255 de lo contrario como 0
 
 
-void  binarization(unsigned char** matrix, int w, int h, int umbral_binary){
+void  binarization(unsigned char **buffer_laplaciano,int start,int end, int width, int umbral_binary){
     int i,j;
-    int count = 0;
-    for(i=0;i<h;i++){
-        for(j=0;j<w;j++){
-            if(matrix[i][j] > umbral_binary){
-                count += 1;
-                matrix[i][j] = (uint8_t) 255;
+    
+    for(i=start;i<end;i++){
+        for(j=0;j<width;j++){
+            if(buffer_laplaciano[i][j] > umbral_binary){
+                buffer_laplaciano[i][j] = (uint8_t) 255;
             }else{
-                matrix[i][j] = (uint8_t) 0;
+                buffer_laplaciano[i][j] = (uint8_t) 0;
             }
-
         }
     }
 }
@@ -204,26 +177,19 @@ void  binarization(unsigned char** matrix, int w, int h, int umbral_binary){
 // Funcionamiento: por cada posición en la matrix se aplica el filtro con la función calculateFilter y se agrega en esa posición
 // Salida: retorna el filtro aplicado
 
-unsigned char** filterLapleciano(unsigned char** matrix,int w, int h, char *fileName){
+unsigned char** filterLapleciano(unsigned char **buffer_gray, unsigned char **buffer_laplaciano,int start,int end, int width, char *fileName){
+    int i,j;
+    
     char path_full[100] = "input/";
     strcat(path_full,fileName);
     int **filter = readFile(path_full,3);
-    size_t height_s = h;
-    size_t width_s = w;
-    unsigned char **matrixFilter = malloc(height_s * sizeof(unsigned char *));
 
-    int i,j;
-
-    for(i=0;i<h;i++){
-        matrixFilter[i] = (unsigned char *) malloc(width_s);
-    }
-
-    for(i=0;i<w;i++){
-        for(j=0;j<w;j++){
-            matrixFilter[i][j] = (uint8_t) calculateFilter(matrix,filter,i,j,0,h,w);
+    for(i=start;i<end;i++){
+        for(j=0;j<width;j++){
+            buffer_laplaciano[i][j] = (uint8_t) calculateFilter(buffer_gray,filter,i,j,0,height,width);
         }
     }
-    return matrixFilter;
+
 }
 
 // Entradas: un arreglo de pixeles con tres canales, ancho, alto, y canales de la imagen
@@ -233,24 +199,15 @@ unsigned char** filterLapleciano(unsigned char** matrix,int w, int h, char *file
 // fuente: https://solarianprogrammer.com/2019/06/10/c-programming-reading-writing-images-stb_image-libraries/
 
 
-unsigned char *grayProccess(unsigned char *image, int width, int height,int channels){
+unsigned char *grayProccess(unsigned char **buffer, unsigned char **buffer_gray,int start, int end,int width, int channels){
 
-
-    img_size = width * height * channels;
-    int gray_channels = 1;
-    gray_img_size = width * height * gray_channels;
-    unsigned char* gray_img = malloc(gray_img_size);
-
-    if(gray_img == NULL){
-       printf("Error al asignar memoria a la variable gray_img\n");
-        exit(1);
+    int i,j,k;
+    for(i=start;i<end;i++){
+        for(j=0,k=0;j<width;k = k + 3,j++){
+            buffer_gray[i][j] = ( ( buffer[i][k] * 0.3) + (buffer[i][k + 1] *0.59) + (buffer[i][k + 2] * 0.11) );
+        }
     }
 
-    for(unsigned char *p = image, *pg = gray_img; p != image + img_size; p += channels, pg += gray_channels) {
-        *pg = (uint8_t)((*p * 0.3) + (*(p + 1) * 0.59) + (*(p + 2) * 0.11) );
-    }
-
-    return gray_img;
 }
 
 // Entrada: puntero de ancho, alto, canales y arreglo de imagen, i indica un numero para crear la imagen

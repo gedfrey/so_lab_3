@@ -19,6 +19,8 @@ unsigned char **images;
 int size_buffer;
 
 unsigned char **buffer;
+unsigned char **buffer_gray;
+unsigned char **buffer_laplaciano;
 
 size_t img_size;
 
