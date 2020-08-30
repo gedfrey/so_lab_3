@@ -11,45 +11,82 @@
 // Funcionamiento: Esta funcion genera el flujo de procesamiento de imagen desde su apertura hasta la impresión
 
 
-pthread_mutex_t buffer_empty;
+//pthread_mutex_t buffer_empty;
 pthread_mutex_t buffer_in_use;
 pthread_mutex_t buffer_ready;
+pthread_cond_t buffer_empty;
+pthread_mutex_t buffer_complete;
 
+typedef struct {
+    int start,id, end;
 
-void *threadProducer(void *param){
-    int i;
-    printf("iniciando lectura\n");
-    for(i=0;i<(int) (long)param;i++){
-        free(image);
-        free(buffer);
-        image = open(&width,&height,&channels,NULL,i);
-        printf("width :%d\n",width);
-        printf("height :%d\n",height);
-        printf("channels :%d\n",channels);
-        img_size = width * height * channels;
-        buffer = malloc(img_size);
-        for(unsigned char *p = image, *pg = buffer; p != image + img_size; p += 1, pg += 1) {
-            *pg = (uint8_t) *p ;
-        }
+} threadConsumer;
 
-        writeImage(width, height, 3,buffer,i);
-        //pthread_mutex_unlock(&buffer_ready);
+threadConsumer *threads_consumer_data;
+
+void *producer(void *param){
+   
+    int i,j;
+
+    image = open(&width,&height,&channels,NULL,(long)(int) param);
+    buffer = malloc(height * sizeof(unsigned char *));
+    unsigned char *copyImg = image;
+    
+    for(i=0;i<height;i++){
+        buffer[i] = (unsigned char *) malloc(width * 3);
     }
+
+
+    for(i=0;i < height;i++){
+
+        for(j=0;j < width * 3; j++){
+            buffer[i][j] = *copyImg;
+            copyImg++;
+        }
+    }
+
+
+    // size_t img_size = width * height * channels;
+    // unsigned char *img = malloc(img_size);
+    // unsigned char *p = img;
+
+    // for(i=0;i < height;i++){
+
+    //     for(j=0;j < width * 3; j++){
+    //         *p = (uint8_t) buffer[i][j];
+    //         p++;
+    //     }
+    // }
+
+    // writeImage(width, height, 3,img,(long)(int) param);
+
+}
+
+void *consumer(void * param){
+    
+    int j = (long) (int) param;
+
+    //printf("%d\n",j);
+    printf("hebra id: %d, hebra inicio: %d, hebra fin: %d\n",threads_consumer_data[j].id,threads_consumer_data[j].start,threads_consumer_data[j].end);
+
 }
 
 void processed_images(int number){
-    int max,i;
+    // m: cantidad_total_filas_imagen/ cantidad_de_hebras
+    int max,i,j,m;
     int *resultsClasifications;
 
+    int threads_size = 10;
+    
     // como hay tres imagenes si se ingresa un valor mayor a 3 se guarda el 3 como maximo.
 
     pthread_t t_productor;
     pthread_t t_consumidor[10];
 
-    pthread_mutex_init(&buffer_empty,NULL);
-    pthread_mutex_init(&buffer_in_use,NULL);
-    pthread_mutex_init(&buffer_ready,NULL);
-    pthread_mutex_lock(&buffer_ready);
+    //pthread_cond_init(&buffer_empty,NULL);
+    //pthread_mutex_init(&buffer_in_use,NULL);
+    //pthread_mutex_init(&buffer_ready,NULL);
+    //pthread_mutex_lock(&buffer_ready);
 
 
     if(number < 3){
@@ -59,52 +96,60 @@ void processed_images(int number){
     }
     resultsClasifications = (int*) malloc(max * sizeof(int));
 
-    printf("procesando imagenes\n");
-
-    // imagenes
-    
     
     images = malloc(max * sizeof(unsigned char *));
     
+    // generando data hebras
+
+    threads_consumer_data = malloc(threads_size * sizeof(threadConsumer));
 
 
-    pthread_create(&t_productor,NULL,threadProducer,(void *) max);
-    pthread_join(t_productor,NULL);
+    printf("procesando imagenes\n");
+
+    // procesando las imagenes
+
+
+
+    for(i=0; i < max;i++){
+
+
+        pthread_create(&t_productor,NULL,producer,(void *) i);
+        pthread_join(t_productor,NULL);
+        m = height / threads_size;
+        printf("valor de height : %d\n",height);
+        printf("valor de m : %d\n",m);
+        
+        // inicio de cada hebra
+
+        for(j=0; j < threads_size; j++){
+            threads_consumer_data[j].id = j;
+            threads_consumer_data[j].start = j * m;
+
+            if(j == threads_size - 1){
+                threads_consumer_data[j].end = height;
+            }else{
+                threads_consumer_data[j].end = j * m + m;
+            }
+
+            printf("creando hebra consumidora\n");
+
+            pthread_create(&t_consumidor[j],NULL,consumer,(void *) j);
+            //pthread_join(t_consumidor[j],NULL);
+        }
+
+        // for(j=0; j < threads_size; j++){
+        //     printf(" hebra id: %d, hebra inicio: %d, hebra fin: %d\n",threads_consumer_data[j].id,threads_consumer_data[j].start,threads_consumer_data[j].end);
+        // }
+
+        // fin de cada hebra
+
+        for(j=0; j < threads_size; j++){
+            pthread_join(t_consumidor[j],NULL);
+        }
+
+    }
+
     printf("finalizando proceso\n");
-    //for(i=0;i<max;i++){
-
-        // obtenemos un arreglo con tres canales
-        //unsigned char *image = open(&width,&height,&channels,images[i],i);
-
-        // del mismo arreglo se realiza la transformacion a gris
-        //unsigned char *grayImage = grayProccess(image, width, height, channels);
-
-        // se transforma el arreglo a una matrix
-        //unsigned char **matrix = createMatrix(grayImage,width,height);
-
-        // se aplica el filtro lapleciano
-        //unsigned char **matrixFilter = filterLapleciano(matrix,width,height,name_mask_laplaciana);
-
-        // se aplica la binarizacion
-        //binarization(matrixFilter,width, height,umbral_binary);
-
-        // se clasifica y se obtiene una matrix por cada imagen
-        //resultsClasifications[i]=classification(matrixFilter,width,height,umbral_classification);
-
-        // se convierte de matrix a arreglo para usar la funcion de guardar la imagen
-        //unsigned char *copyImg = matrixToArray(matrixFilter,width,height);
-
-        // se guarda la imagen
-        //writeImage(width, height, 1,copyImg,i);
-
-        // se cierra el archivo
-        //closeImage(image);
-    //}
-
-    // si se tiene la bandera de display se imprime
-    //if(display != 0){
-    //    printClassification(resultsClasifications,max);
-    //}
     
 }
 

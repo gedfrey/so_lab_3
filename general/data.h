@@ -16,9 +16,10 @@ int width, height, channels;
 unsigned char *image;
 unsigned char **images;
 
-int *size_buffer;
+int size_buffer;
 
-unsigned char *buffer;
+unsigned char **buffer;
+
 size_t img_size;
 
 
