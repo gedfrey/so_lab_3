@@ -1,5 +1,5 @@
 # so_lab_1
-Sistemas Operativos Laboratorio 1
+Sistemas Operativos Laboratorio 3
 
 compilar:
 
@@ -8,6 +8,7 @@ make
 opciones:
 
 * c: cantidad de imagenes
+* h: cantidad de hebras
 * m: nombre del archivo de mascara
 * u: umbral binario
 * n: umbral clasificación
@@ -15,4 +16,4 @@ opciones:
 
 ejemplo:
 
-./pipeline -c 3 -m "mask.txt" -u 10 -n 0 -b
+./pipeline -c 3 -h 10 -m "mask.txt" -u 10 -n 0 -b
