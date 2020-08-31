@@ -130,33 +130,46 @@ unsigned char **createMatrix(unsigned char *img,int w,int h){
     return array2d;
 }
 
-// Entradas: un arreglo con los resultados de la clasificación y el numero de imagenes leidas
-// Funcionamiento: a partir del arreglo imprime el resultado de aplicar la clasificacion
+// Entradas: el contador global, el numero de la imagen que esta siendo procesada, el largo y ancho de la imagen, el umbral
+// Funcionamiento: la hebra final imprime la clasificacion
 // Salida:
 
-void printClassification(int* arrayResults,int size){
+void printClassification(int count,int n_image, int height, int width, int umbral_classification){
 
-    int i;
-    char number_to_string[10];
-    char path_full[100];
-    printf("|\t image\t |\t nearly black\t |\n");
-    printf("|----------------------------------------|\n");
-    for(i=0;i<size;i++){
-        strcpy(path_full,"imagen_");
-        snprintf(number_to_string, 100,"%d",i+1); 
-        strcat(path_full,number_to_string);
-        if(arrayResults[i] == 1){
-            printf("|\t %s\t |\t yes\t|\n",path_full);
-        }else{
-            printf("|\t %s\t |\t no\t|\n",path_full);
-        }
+    int total,result;
+    char path_full[100]; 
+    char n_image_string[10];
+
+    total = width * height;
+    // printf("el total es count : %d",count);
+    if( ((count * 100)/ total) >= umbral_classification){
+        result = 1;
+    }else{
+        result = 0;
+    }   
+
+
+    if(n_image == 0){
+        printf("|\t image\t |\t nearly black\t |\n");
+        printf("|----------------------------------------|\n");
     }
+
+    strcpy(path_full,"out_");
+    sprintf(n_image_string,"%d", n_image); 
+    strcat(path_full,n_image_string);
+
+    if(result == 1){
+        printf("|\t %s\t |\t yes\t|\n",path_full);
+    }else{
+        printf("|\t %s\t |\t no\t|\n",path_full);
+    }
+
 }
 
 
 
-// Entradas: una matrix de pixeles, el ancho, largo de la imagen, el umbral de binarizacion
-// Funcionamiento: va revisando por cada pixel si este es mayor al umbral se deja como 255 de lo contrario como 0
+// Entradas: una matrix de pixeles, el inicio y final de las filas asignadas a la hebra, el ancho de la imagen y el umbral de binario
+// Funcionamiento: cada hebra va ejecutando la filas asignadas y binarizando cada posicion 
 
 
 void  binarization(unsigned char **buffer_laplaciano,int start,int end, int width, int umbral_binary){
@@ -173,11 +186,10 @@ void  binarization(unsigned char **buffer_laplaciano,int start,int end, int widt
     }
 }
 
-// Entradas: una matrix de pixeles , el ancho, largo, y el nombre del archivo que se usa para aplicar el filtro
-// Funcionamiento: por cada posición en la matrix se aplica el filtro con la función calculateFilter y se agrega en esa posición
-// Salida: retorna el filtro aplicado
+// Entradas: el buffer de gris, el buffer donde se almacenara la lapleciana, inicio y fin de cada hebra y el nombre de la mascara  
+// Funcionamiento: cada hebra ejecuta su posiciòn y va analizando la imagen original(buffer gris) y la almacena en el buffer lapleciano
 
-unsigned char** filterLapleciano(unsigned char **buffer_gray, unsigned char **buffer_laplaciano,int start,int end, int width, char *fileName){
+void filterLapleciano(unsigned char **buffer_gray, unsigned char **buffer_laplaciano,int start,int end, int width, char *fileName){
     int i,j;
     
     char path_full[100] = "input/";
@@ -192,14 +204,12 @@ unsigned char** filterLapleciano(unsigned char **buffer_gray, unsigned char **bu
 
 }
 
-// Entradas: un arreglo de pixeles con tres canales, ancho, alto, y canales de la imagen
-// Funcionamiento: por cada posición del arreglo y dependiendo de la cantidad de canales que en este caso se consideran 3 se calcula
-// la escala de grises cada tres canales y se guarda en otro arreglo.
-// Salida: se obtiene un arreglo de pixeles con un solo canal
+// Entradas: el buffer obtenido por el productor, el buffer donde se almacenara el gris, el inicio y fin de cada hebra en las filas, el ancho de la imagen y el numero de canales
+// Funcionamiento: cada hebra procesa y genera el proceso de griseado en cada fila asignada
 // fuente: https://solarianprogrammer.com/2019/06/10/c-programming-reading-writing-images-stb_image-libraries/
 
 
-unsigned char *grayProccess(unsigned char **buffer, unsigned char **buffer_gray,int start, int end,int width, int channels){
+void grayProccess(unsigned char **buffer, unsigned char **buffer_gray,int start, int end,int width, int channels){
 
     int i,j,k;
     for(i=start;i<end;i++){
@@ -217,9 +227,6 @@ unsigned char *grayProccess(unsigned char **buffer, unsigned char **buffer_gray,
 
 
 unsigned char *open(int *width,int *height,int *channels,unsigned char *image, int i){
-
-    // Crear path para abrir imagenes
-    // las imagenes estan en la carpeta images
     char number_to_string[10];
     char path_full[100];
     strcpy(path_full,"images/imagen_");
@@ -230,19 +237,25 @@ unsigned char *open(int *width,int *height,int *channels,unsigned char *image, i
     return image;
 }
 
-// Entrada: ancho, alto y canales usados( en este caso siempre es 1), arreglo de pixeles, i indica el numero de la imagen
+// Entrada: ancho, alto y canales usados( en este caso siempre es 1), matrix de pixeles, i indica el numero de la imagen
 // Funcionamiento: se utiliza la libreria de stbi y se almacena la imagen
 
 
-void writeImage(int width, int height, int channels,unsigned char *image,int i){
+void writeImage(int width, int height, int channels,unsigned char **image,int i){
+
+
+    unsigned char *img = matrixToArray(image,width,height);
     char number_to_string[10];
     char path_full_output[100];
     strcpy(path_full_output,"output/imagen_");
     snprintf(number_to_string, 100,"%d",i+1); 
     strcat(path_full_output,number_to_string);
     strcat(path_full_output,".jpg");
-    stbi_write_jpg(path_full_output,width, height, channels, image, 100);
+    stbi_write_jpg(path_full_output,width, height, channels, img, 100);
 }
+
+// Entrada: el arreglo de la imagen
+// Funcionamiento: limpia el arreglo de la imagen abierta
 
 void closeImage(unsigned char* image){
     stbi_image_free(image);

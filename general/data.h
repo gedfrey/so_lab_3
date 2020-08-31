@@ -9,7 +9,7 @@ char* name_mask_laplaciana;
 int umbral_binary = -1;
 int umbral_classification = -1;
 int display = 0; // boleano de 0: falso, 1: verdadero
-
+int n_threads = 1;
 // variables del procesamiento de imagen
 
 int width, height, channels;

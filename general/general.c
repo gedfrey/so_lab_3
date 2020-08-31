@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "data.h"
@@ -7,16 +8,9 @@
 #include "functions_images.h"
 #include <pthread.h>
 
-// Entradas: number representa la cantidad de imagenes a procesar
-// Funcionamiento: Esta funcion genera el flujo de procesamiento de imagen desde su apertura hasta la impresión
-
 int count;
 
-//pthread_mutex_t buffer_empty;
-// pthread_mutex_t buffer_in_use;
-// pthread_mutex_t buffer_ready;
-// pthread_cond_t buffer_empty;
-// pthread_mutex_t buffer_complete;
+int count_ready_thread;
 
 pthread_mutex_t mutex_classification;
 
@@ -26,23 +20,25 @@ pthread_barrier_t barrier_laplaciana;
 
 pthread_barrier_t barrier_binarization; 
 
+// Estructura para las hebras
+
 typedef struct {
-    int start,id, end;
+    int start,id, end,n_image;
 
 } threadConsumer;
 
 threadConsumer *threads_consumer_data;
 
 
-// Entradas: una matrix de pixeles, el ancho , el largo y el umbral de classificacion
-// Funcionamiento: por cada posición busca los pixeles negros y los cuenta, posteriormente realiza el calculo
-// del porcentaje con la cantidad total de pixeles, que se calcula por el ancho y el largo
-// Salidas: un numero que indica el porcentaje de pixeles negros
+// Entradas: una matrix de pixeles, el inicio , el fin y el ancho de la imagen
+// Funcionamiento: cada hebra ejecuta por cada fila asignada la clasificacion
 
-int classification(unsigned char **buffer_laplaciano,int start,int end, int width, int count){
+int classification(unsigned char **buffer_laplaciano,int start,int end, int width){
     int i,j;
 
     pthread_mutex_lock(&mutex_classification);
+
+    count_ready_thread++;
 
     for(i=start;i<end;i++){
         for(j=0;j<width;j++){
@@ -53,22 +49,21 @@ int classification(unsigned char **buffer_laplaciano,int start,int end, int widt
     }
 
     pthread_mutex_unlock(&mutex_classification);
-  
-    // if( ((count * 100)/ total) >= umbral_classification){
-    //     return 1;
-    // }
 
-    // return 0;
-    
-
+    return 0;
 }
+
+// Entradas: el numero de la imagen
+// Funcionamiento: esta hebra lee la image y la guarda en una matrix
 
 
 void *producer(void *param){
-   
+    
+    int id = (intptr_t) param;
     int i,j;
     count = 0;
-    image = open(&width,&height,&channels,NULL,(long)(int) param);
+    count_ready_thread = 0;
+    image = open(&width,&height,&channels,NULL,id);
     buffer = malloc(height * sizeof(unsigned char *));
     buffer_gray = malloc(height * sizeof(unsigned char *));
     buffer_laplaciano = malloc(height * sizeof(unsigned char *));
@@ -97,28 +92,16 @@ void *producer(void *param){
         }
     }
 
-
-    // size_t img_size = width * height * channels;
-    // unsigned char *img = malloc(img_size);
-    // unsigned char *p = img;
-
-    // for(i=0;i < height;i++){
-
-    //     for(j=0;j < width * 3; j++){
-    //         *p = (uint8_t) buffer[i][j];
-    //         p++;
-    //     }
-    // }
-
-    // writeImage(width, height, 3,img,(long)(int) param);
+    pthread_exit(NULL);
 
 }
 
-void *consumer(void * param){
-    
-    int j = (long) (int) param;
+// Entradas: el numero de la imagen
+// Funcionamiento: genera el pipeline para cada hebra, la hebra tiene asignada un numero de fila, al final imprime y guarda la imagen
 
-    // printf("hebra id: %d, hebra inicio: %d, hebra fin: %d\n",threads_consumer_data[j].id,threads_consumer_data[j].start,threads_consumer_data[j].end);
+void *consumer(void *param){
+    
+    int j = (intptr_t) param;
 
     grayProccess(buffer,buffer_gray,threads_consumer_data[j].start,threads_consumer_data[j].end, width, channels);
 
@@ -132,56 +115,52 @@ void *consumer(void * param){
 
     pthread_barrier_wait(&barrier_binarization);
 
-    classification(buffer_laplaciano,threads_consumer_data[j].start,threads_consumer_data[j].end, width,count);
-
-    // size_t img_size = width * height * 1;
-    // unsigned char *img = malloc(img_size);
-    // unsigned char *p = img;
-
-    // int k;
-
-    // for(k=0;k < height;k++){
-
-    //     for(j=0;j < width ; j++){
-    //         *p = (uint8_t) buffer_gray[k][j];
-    //         p++;
-    //     }
-    // }
-
-    // writeImage(width, height, 1,img,0);
+    classification(buffer_laplaciano,threads_consumer_data[j].start,threads_consumer_data[j].end, width);
 
 
+    if(count_ready_thread == n_threads){
+
+        if(display == 1){
+            printClassification(count,threads_consumer_data[j].n_image,height,width,umbral_classification);
+        }
+
+        writeImage(width, height, 1,buffer_laplaciano,threads_consumer_data[j].n_image);
+    }
+
+    pthread_exit(NULL);
 }
+
+
+// Entradas: la cantidad de imagenes
+// Funcion: es la que se encarga de procesar las imagenes creadno la hebra productora y las hebras consumidoras
 
 void processed_images(int number){
     // m: cantidad_total_filas_imagen/ cantidad_de_hebras
-    int max,i,j,m,barrier_gray_c, barrier_laplaciana_c, barrier_binarization_c,total;
-    int *resultsClasifications;
-
-    int threads_size = 10;
-    
-    // como hay tres imagenes si se ingresa un valor mayor a 3 se guarda el 3 como maximo.
+    int max,i,j,m,barrier_gray_c, barrier_laplaciana_c, barrier_binarization_c;
 
     pthread_t t_productor;
-    pthread_t t_consumidor[10];
+
+    pthread_t *t_consumidor;
+
+    t_consumidor = malloc (n_threads * sizeof(pthread_t));
 
     pthread_mutex_init(&mutex_classification,NULL);
 
-    barrier_gray_c = pthread_barrier_init(&barrier_gray, NULL, threads_size);
+    barrier_gray_c = pthread_barrier_init(&barrier_gray, NULL, n_threads);
 
     if (barrier_gray_c) {
         fprintf(stderr, "pthread_barrier_init: %s\n", strerror(barrier_gray_c));
         exit(1);
     }
 
-    barrier_laplaciana_c = pthread_barrier_init(&barrier_laplaciana, NULL, threads_size);
+    barrier_laplaciana_c = pthread_barrier_init(&barrier_laplaciana, NULL, n_threads);
 
     if (barrier_laplaciana_c) {
         fprintf(stderr, "pthread_barrier_init: %s\n", strerror(barrier_laplaciana_c));
         exit(1);
     }
 
-    barrier_binarization_c = pthread_barrier_init(&barrier_binarization, NULL, threads_size);
+    barrier_binarization_c = pthread_barrier_init(&barrier_binarization, NULL, n_threads);
 
     if (barrier_binarization_c) {
         fprintf(stderr, "pthread_barrier_init: %s\n", strerror(barrier_binarization_c));
@@ -193,18 +172,12 @@ void processed_images(int number){
     }else{
         max = 3;
     }
-
-    resultsClasifications = (int*) malloc(max * sizeof(int));
-
     
     images = malloc(max * sizeof(unsigned char *));
     
     // generando data hebras
 
-    threads_consumer_data = malloc(threads_size * sizeof(threadConsumer));
-
-
-    printf("procesando imagenes\n");
+    threads_consumer_data = malloc(n_threads * sizeof(threadConsumer));
 
     // procesando las imagenes
 
@@ -213,78 +186,33 @@ void processed_images(int number){
     for(i=0; i < max;i++){
 
 
-        pthread_create(&t_productor,NULL,producer,(void *) i);
+        pthread_create(&t_productor,NULL,producer,(void *) (intptr_t) i);
         pthread_join(t_productor,NULL);
-        m = height / threads_size;
-        printf("valor de height : %d\n",height);
-        printf("valor de m : %d\n",m);
-        
-        // inicio de cada hebra
+        m = height / n_threads;
 
-        for(j=0; j < threads_size; j++){
+        for(j=0; j < n_threads; j++){
             threads_consumer_data[j].id = j;
             threads_consumer_data[j].start = j * m;
-
-            if(j == threads_size - 1){
+            threads_consumer_data[j].n_image = i;
+            if(j == n_threads - 1){
                 threads_consumer_data[j].end = height;
             }else{
                 threads_consumer_data[j].end = j * m + m;
             }
 
-            printf("creando hebra consumidora\n");
-
-            pthread_create(&t_consumidor[j],NULL,consumer,(void *) j);
-            //pthread_join(t_consumidor[j],NULL);
+            pthread_create(&t_consumidor[j],NULL,consumer,(void *) (intptr_t) j);
 
 
 
         }
-
-        // for(j=0; j < threads_size; j++){
-        //     printf(" hebra id: %d, hebra inicio: %d, hebra fin: %d\n",threads_consumer_data[j].id,threads_consumer_data[j].start,threads_consumer_data[j].end);
-        // }
 
         // fin de cada hebra y esperamos cada uno
 
-        for(j=0; j < threads_size; j++){
+        for(j=0; j < n_threads; j++){
             pthread_join(t_consumidor[j],NULL);
         }
 
-        // clasificacion
-
-        total = width * height;
-
-        if( ((count * 100)/ total) >= umbral_classification){
-            printf("es nearlyblack\n");
-            // return 1;
-        }else{
-            printf("no es nearlyblack\n");
-        }   
-
-        // return 0;
-
-
-        // se imprime la imagen
-
-        size_t img_size = width * height * 1;
-        unsigned char *img = malloc(img_size);
-        unsigned char *p = img;
-
-        int k;
-
-        for(k=0;k < height;k++){
-
-            for(j=0;j < width ; j++){
-                *p = (uint8_t) buffer_laplaciano[k][j];
-                p++;
-            }
-        }
-
-        writeImage(width, height, 1,img,i);
-
     }
-
-    printf("finalizando proceso\n");
     
 }
 
@@ -326,13 +254,10 @@ void validate(){
 void getArguments(int argc, char *argv[]){
     int opt;
 
-    //printf(" argc :%d\n",argc);
-
-    while((opt = getopt(argc, argv, "c:m:u:n:b")) != -1){
+    while((opt = getopt(argc, argv, "c:h:m:u:n:b")) != -1){
         switch (opt)
         {
         case 'c':
-            // printf("valor %s",optarg);
             number_of_images = atoi(optarg);
             if(number_of_images <= 0){
                 printf("Error, el numero de imagenes no puede ser 0 o menor \n");
@@ -341,7 +266,6 @@ void getArguments(int argc, char *argv[]){
             break;
         case 'm':
             name_mask_laplaciana = optarg;
-            //printf("%s",optarg);
             if(name_mask_laplaciana[0] == '\0' || name_mask_laplaciana[0] == '-' || optarg == NULL){
                 printf("Error, el nombre de la mascara laplaciana esta vacio \n");
                 exit(1);
@@ -364,13 +288,18 @@ void getArguments(int argc, char *argv[]){
         case 'b':
             display = 1;
             break;
+
+        case 'h':
+            n_threads = atoi(optarg);
+            if(n_threads < 1){
+                printf("El numero de hebras mayor que 0\n");
+                exit(1);
+            }
+            break;
         case '?':
             printf("Error bandera ingresada desconocida \n");
             break;
         }
-
-
-
 
     }
 
