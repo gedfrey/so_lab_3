@@ -1,4 +1,4 @@
-# so_lab_1
+# so_lab_3
 Sistemas Operativos Laboratorio 3
 
 compilar:
