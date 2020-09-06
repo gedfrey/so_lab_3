@@ -243,11 +243,10 @@ unsigned char *open(int *width,int *height,int *channels,unsigned char *image, i
 
 void writeImage(int width, int height, int channels,unsigned char **image,int i){
 
-
     unsigned char *img = matrixToArray(image,width,height);
     char number_to_string[10];
     char path_full_output[100];
-    strcpy(path_full_output,"output/imagen_");
+    strcpy(path_full_output,"output/out_");
     snprintf(number_to_string, 100,"%d",i+1); 
     strcat(path_full_output,number_to_string);
     strcat(path_full_output,".jpg");

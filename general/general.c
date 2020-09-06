@@ -35,18 +35,21 @@ threadConsumer *threads_consumer_data;
 
 int classification(unsigned char **buffer_laplaciano,int start,int end, int width){
     int i,j;
+    int countLocal = 0;
 
-    pthread_mutex_lock(&mutex_classification);
 
-    count_ready_thread++;
 
     for(i=start;i<end;i++){
         for(j=0;j<width;j++){
             if(buffer_laplaciano[i][j] == 0){
-                count += 1;
+                countLocal += 1;
             }
         }
     }
+
+    pthread_mutex_lock(&mutex_classification);
+    count += countLocal;
+    count_ready_thread++;
 
     pthread_mutex_unlock(&mutex_classification);
 
@@ -116,8 +119,7 @@ void *consumer(void *param){
     pthread_barrier_wait(&barrier_binarization);
 
     classification(buffer_laplaciano,threads_consumer_data[j].start,threads_consumer_data[j].end, width);
-
-
+    
     if(count_ready_thread == n_threads){
 
         if(display == 1){
